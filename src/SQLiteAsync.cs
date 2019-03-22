@@ -94,12 +94,20 @@ namespace SQLite
 		/// <summary>
 		/// Gets the database path used by this connection.
 		/// </summary>
-		public string DatabasePath => GetConnection ().DatabasePath;
+		public string DatabasePath{
+            get{
+                return GetConnection ().DatabasePath;
+            }
+        }
 
 		/// <summary>
 		/// Gets the SQLite library version number. 3007014 would be v3.7.14
 		/// </summary>
-		public int LibVersionNumber => GetConnection ().LibVersionNumber;
+		public int LibVersionNumber{
+            get{
+                return GetConnection ().LibVersionNumber;
+            }
+        }
 
 		/// <summary>
 		/// The amount of time to wait for a table to become unlocked.
@@ -136,7 +144,11 @@ namespace SQLite
 		/// <summary>
 		/// Whether to store DateTime properties as ticks (true) or strings (false).
 		/// </summary>
-		public bool StoreDateTimeAsTicks => GetConnection ().StoreDateTimeAsTicks;
+		public bool StoreDateTimeAsTicks{
+            get{
+                return GetConnection ().StoreDateTimeAsTicks;
+            }
+        }
 
 		/// <summary>
 		/// Whether to writer queries to <see cref="Tracer"/> during execution.
@@ -168,7 +180,13 @@ namespace SQLite
 		/// Returns the mappings from types to tables that the connection
 		/// currently understands.
 		/// </summary>
-		public IEnumerable<TableMapping> TableMappings => GetConnection ().TableMappings;
+        public IEnumerable<TableMapping> TableMappings
+        {
+            get
+            {
+                return GetConnection().TableMappings;
+            }
+        }
 
 		/// <summary>
 		/// Closes all connections to all async databases.
@@ -199,7 +217,7 @@ namespace SQLite
 		{
 			return Task.Factory.StartNew (() => {
 				SQLiteConnectionPool.Shared.CloseConnection (_connectionString);
-			}, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
+			}, CancellationToken.None, TaskCreationOptions.None, TaskScheduler.Default);
 		}
 
 		Task<T> ReadAsync<T> (Func<SQLiteConnectionWithLock, T> read)
@@ -209,7 +227,7 @@ namespace SQLite
 				using (conn.Lock ()) {
 					return read (conn);
 				}
-			}, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
+			}, CancellationToken.None, TaskCreationOptions.None, TaskScheduler.Default);
 		}
 
 		Task<T> WriteAsync<T> (Func<SQLiteConnectionWithLock, T> write)
@@ -219,7 +237,7 @@ namespace SQLite
 				using (conn.Lock ()) {
 					return write (conn);
 				}
-			}, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
+			}, CancellationToken.None, TaskCreationOptions.None, TaskScheduler.Default);
 		}
 
 		/// <summary>
@@ -1149,7 +1167,7 @@ namespace SQLite
 				using (conn.Lock ()) {
 					return read (conn);
 				}
-			}, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
+			}, CancellationToken.None, TaskCreationOptions.None, TaskScheduler.Default);
 		}
 
 		Task<U> WriteAsync<U> (Func<SQLiteConnectionWithLock, U> write)
@@ -1159,7 +1177,7 @@ namespace SQLite
 				using (conn.Lock ()) {
 					return write (conn);
 				}
-			}, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
+			}, CancellationToken.None, TaskCreationOptions.None, TaskScheduler.Default);
 		}
 
 		/// <summary>
@@ -1313,7 +1331,7 @@ namespace SQLite
 		{
 			WeakReference<SQLiteConnectionWithLock> connection;
 
-			public SQLiteConnectionString ConnectionString { get; }
+            public SQLiteConnectionString ConnectionString { get; private set; }
 
 			public Entry (SQLiteConnectionString connectionString)
 			{
@@ -1340,7 +1358,8 @@ namespace SQLite
 			public void Close ()
 			{
 				var wc = connection;
-				if (wc != null && wc.TryGetTarget (out var c)) {
+                SQLiteConnectionWithLock c;
+				if (wc != null && wc.TryGetTarget (out c)) {
 					c.Close ();
 				}
 				connection = null;
@@ -1383,7 +1402,8 @@ namespace SQLite
 					_entries.Remove (key);
 				}
 			}
-			entry?.Close ();
+            if (entry != null)
+			    entry.Close ();
 		}
 
 		/// <summary>

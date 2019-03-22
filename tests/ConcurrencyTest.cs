@@ -60,7 +60,7 @@ namespace SQLite.Tests
 							using (var dbConnection = new DbConnection(flags))
                             {
                                 var records = dbConnection.Table<TestObj>().ToList();
-                                System.Diagnostics.Debug.WriteLine($"{Environment.CurrentManagedThreadId} Read records: {records.Count}");
+                                System.Diagnostics.Debug.WriteLine(string.Format("{0} Read records: {1}", Environment.CurrentManagedThreadId, records.Count));
                             }
 
                             // No await so we stay on the same thread
@@ -97,7 +97,7 @@ namespace SQLite.Tests
                         {
                             using (var dbConnection = new DbConnection(SQLiteOpenFlags.FullMutex | SQLiteOpenFlags.ReadWrite))
                             {
-                                System.Diagnostics.Debug.WriteLine($"{Environment.CurrentManagedThreadId} Start insert");
+                                System.Diagnostics.Debug.WriteLine(string.Format("{0} Start insert", Environment.CurrentManagedThreadId));
 
                                 for (var i = 0; i < 50; i++)
                                 {
@@ -108,7 +108,7 @@ namespace SQLite.Tests
                                     dbConnection.Insert(newRecord);
                                 }
 
-                                System.Diagnostics.Debug.WriteLine($"{Environment.CurrentManagedThreadId} Inserted records");
+                                System.Diagnostics.Debug.WriteLine(string.Format("{0} Inserted records", Environment.CurrentManagedThreadId));
                             }
 
                             // No await so we stay on the same thread

@@ -267,7 +267,7 @@ namespace SQLite
 		public SQLiteConnection (SQLiteConnectionString connectionString)
 		{
 			if (connectionString == null)
-				throw new ArgumentNullException (nameof (connectionString));
+				throw new ArgumentNullException ("connectionString");
 			if (connectionString.DatabasePath == null)
 				throw new InvalidOperationException ("DatabasePath must be specified");
 
@@ -302,17 +302,21 @@ namespace SQLite
 			BusyTimeout = TimeSpan.FromSeconds (0.1);
 			Tracer = line => Debug.WriteLine (line);
 
-			connectionString.PreKeyAction?.Invoke (this);
-			if (connectionString.Key is string stringKey) {
+            if (connectionString.PreKeyAction != null)
+			    connectionString.PreKeyAction.Invoke (this);
+			if (connectionString.Key is string) {
+                string stringKey = (string)connectionString.Key;
 				SetKey (stringKey);
 			}
-			else if (connectionString.Key is byte[] bytesKey) {
+			else if (connectionString.Key is byte[]) {
+                byte[] bytesKey = (byte[])connectionString.Key;
 				SetKey (bytesKey);
 			}
 			else if (connectionString.Key != null) {
 				throw new InvalidOperationException ("Encryption keys must be strings or byte arrays");
 			}
-			connectionString.PostKeyAction?.Invoke (this);
+            if (connectionString.PostKeyAction != null)
+			    connectionString.PostKeyAction.Invoke (this);
 		}
 
 		/// <summary>
@@ -347,7 +351,7 @@ namespace SQLite
 		/// <param name="key">Ecryption key plain text that is converted to the real encryption key using PBKDF2 key derivation</param>
 		void SetKey (string key)
 		{
-			if (key == null) throw new ArgumentNullException (nameof (key));
+			if (key == null) throw new ArgumentNullException ("key");
 			var q = Quote (key);
 			Execute ("pragma key = " + q);
 		}
@@ -361,8 +365,8 @@ namespace SQLite
 		/// <param name="key">256-bit (32 byte) ecryption key data</param>
 		void SetKey (byte[] key)
 		{
-			if (key == null) throw new ArgumentNullException (nameof (key));
-			if (key.Length != 32) throw new ArgumentException ("Key must be 32 bytes (256-bit)", nameof(key));
+			if (key == null) throw new ArgumentNullException ("key");
+			if (key.Length != 32) throw new ArgumentException ("Key must be 32 bytes (256-bit)", "key");
 			var s = String.Join ("", key.Select (x => x.ToString ("X2")));
 			Execute ("pragma key = \"x'" + s + "'\"");
 		}
@@ -886,7 +890,8 @@ namespace SQLite
 			if (TimeExecution) {
 				_sw.Stop ();
 				_elapsedMilliseconds += _sw.ElapsedMilliseconds;
-				Tracer?.Invoke (string.Format ("Finished in {0} ms ({1:0.0} s total)", _sw.ElapsedMilliseconds, _elapsedMilliseconds / 1000.0));
+                if (Tracer != null)
+				    Tracer.Invoke (string.Format ("Finished in {0} ms ({1:0.0} s total)", _sw.ElapsedMilliseconds, _elapsedMilliseconds / 1000.0));
 			}
 
 			return r;
@@ -925,7 +930,8 @@ namespace SQLite
 			if (TimeExecution) {
 				_sw.Stop ();
 				_elapsedMilliseconds += _sw.ElapsedMilliseconds;
-				Tracer?.Invoke (string.Format ("Finished in {0} ms ({1:0.0} s total)", _sw.ElapsedMilliseconds, _elapsedMilliseconds / 1000.0));
+                if (Tracer != null)
+				    Tracer.Invoke (string.Format ("Finished in {0} ms ({1:0.0} s total)", _sw.ElapsedMilliseconds, _elapsedMilliseconds / 1000.0));
 			}
 
 			return r;
@@ -1980,7 +1986,8 @@ namespace SQLite
 		public void Backup (string destinationDatabasePath, string databaseName = "main")
 		{
 			// Open the destination
-			var r = SQLite3.Open (destinationDatabasePath, out var destHandle);
+            Sqlite3DatabaseHandle destHandle;
+			var r = SQLite3.Open (destinationDatabasePath, out destHandle);
 			if (r != SQLite3.Result.OK) {
 				throw SQLiteException.New (r, "Failed to open destination database");
 			}
@@ -2091,14 +2098,14 @@ namespace SQLite
 	/// </summary>
 	public class SQLiteConnectionString
 	{
-		public string UniqueKey { get; }
-		public string DatabasePath { get; }
-		public bool StoreDateTimeAsTicks { get; }
-		public object Key { get; }
-		public SQLiteOpenFlags OpenFlags { get; }
-		public Action<SQLiteConnection> PreKeyAction { get; }
-		public Action<SQLiteConnection> PostKeyAction { get; }
-		public string VfsName { get; }
+        public string UniqueKey { get; private set; }
+        public string DatabasePath { get; private set; }
+        public bool StoreDateTimeAsTicks { get; private set; }
+        public object Key { get; private set; }
+        public SQLiteOpenFlags OpenFlags { get; private set; }
+        public Action<SQLiteConnection> PreKeyAction { get; private set; }
+        public Action<SQLiteConnection> PostKeyAction { get; private set; }
+        public string VfsName { get; private set; }
 
 #if NETFX_CORE
 		static readonly string MetroStyleDataPath = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
@@ -2198,7 +2205,7 @@ namespace SQLite
 		public SQLiteConnectionString (string databasePath, SQLiteOpenFlags openFlags, bool storeDateTimeAsTicks, object key = null, Action<SQLiteConnection> preKeyAction = null, Action<SQLiteConnection> postKeyAction = null, string vfsName = null)
 		{
 			if (key != null && !((key is byte[]) || (key is string)))
-				throw new ArgumentException ("Encryption keys must be strings or byte arrays", nameof (key));
+				throw new ArgumentException ("Encryption keys must be strings or byte arrays", "key");
 
 			UniqueKey = string.Format ("{0}_{1:X8}", databasePath, (uint)openFlags);
 			StoreDateTimeAsTicks = storeDateTimeAsTicks;
@@ -2353,15 +2360,19 @@ namespace SQLite
 		readonly Column[] _insertColumns;
 		readonly Column[] _insertOrReplaceColumns;
 
+        const BindingFlags declaredFlags = BindingFlags.DeclaredOnly |
+            BindingFlags.Public | BindingFlags.NonPublic |
+                BindingFlags.Static | BindingFlags.Instance;
+
 		public TableMapping (Type type, CreateFlags createFlags = CreateFlags.None)
 		{
 			MappedType = type;
 			CreateFlags = createFlags;
 
-			var typeInfo = type.GetTypeInfo ();
+			//var typeInfo = type.GetTypeInfo ();
 			var tableAttr =
-				typeInfo.CustomAttributes
-						.Where (x => x.AttributeType == typeof (TableAttribute))
+				type.GetCustomAttributesData()
+						.Where (x => x.Constructor.DeclaringType == typeof (TableAttribute))
 						.Select (x => (TableAttribute)Orm.InflateAttribute (x))
 						.FirstOrDefault ();
 
@@ -2372,21 +2383,21 @@ namespace SQLite
 			var baseType = type;
 			var propNames = new HashSet<string> ();
 			while (baseType != typeof (object)) {
-				var ti = baseType.GetTypeInfo ();
+				//var ti = baseType.GetTypeInfo ();
 				var newProps = (
-					from p in ti.DeclaredProperties
+					from p in baseType.GetProperties(declaredFlags)
 					where
 						!propNames.Contains (p.Name) &&
 						p.CanRead && p.CanWrite &&
-						(p.GetMethod != null) && (p.SetMethod != null) &&
-						(p.GetMethod.IsPublic && p.SetMethod.IsPublic) &&
-						(!p.GetMethod.IsStatic) && (!p.SetMethod.IsStatic)
+						(p.GetGetMethod(true) != null) && (p.GetSetMethod(true) != null) &&
+                        (p.GetGetMethod(true).IsPublic && p.GetSetMethod(true).IsPublic) &&
+                        (!p.GetGetMethod(true).IsStatic) && (!p.GetSetMethod(true).IsStatic)
 					select p).ToList ();
 				foreach (var p in newProps) {
 					propNames.Add (p.Name);
 				}
 				props.AddRange (newProps);
-				baseType = ti.BaseType;
+				baseType = baseType.BaseType;
 			}
 
 			var cols = new List<Column> ();
@@ -2459,7 +2470,7 @@ namespace SQLite
 
 			public string Name { get; private set; }
 
-			public PropertyInfo PropertyInfo => _prop;
+            public PropertyInfo PropertyInfo { get { return _prop; } }
 
 			public string PropertyName { get { return _prop.Name; } }
 
@@ -2482,12 +2493,13 @@ namespace SQLite
 
 			public Column (PropertyInfo prop, CreateFlags createFlags = CreateFlags.None)
 			{
-				var colAttr = prop.CustomAttributes.FirstOrDefault (x => x.AttributeType == typeof (ColumnAttribute));
+				var colAttr = prop.GetCustomAttributesData().FirstOrDefault (x => x.Constructor.DeclaringType == typeof (ColumnAttribute));
 
 				_prop = prop;
-				Name = (colAttr != null && colAttr.ConstructorArguments.Count > 0) ?
-						colAttr.ConstructorArguments[0].Value?.ToString () :
-						prop.Name;
+                if (colAttr != null && colAttr.ConstructorArguments.Count > 0 && colAttr.ConstructorArguments[0].Value != null)
+                    Name = colAttr.ConstructorArguments[0].Value.ToString();
+                else
+                    Name = prop.Name;
 				//If this type is Nullable<T> then Nullable.GetUnderlyingType returns the T, otherwise it returns null, so get the actual type instead
 				ColumnType = Nullable.GetUnderlyingType (prop.PropertyType) ?? prop.PropertyType;
 				Collation = Orm.Collation (prop);
@@ -2511,13 +2523,13 @@ namespace SQLite
 				IsNullable = !(IsPK || Orm.IsMarkedNotNull (prop));
 				MaxStringLength = Orm.MaxStringLength (prop);
 
-				StoreAsText = prop.PropertyType.GetTypeInfo ().CustomAttributes.Any (x => x.AttributeType == typeof (StoreAsTextAttribute));
+				StoreAsText = prop.PropertyType.GetCustomAttributesData().Any (x => x.Constructor.DeclaringType == typeof (StoreAsTextAttribute));
 			}
 
 			public void SetValue (object obj, object val)
 			{
-				if (val != null && ColumnType.GetTypeInfo ().IsEnum) {
-					_prop.SetValue (obj, Enum.ToObject (ColumnType, val));
+				if (val != null && ColumnType.IsEnum) {
+					_prop.SetValue (obj, Enum.ToObject (ColumnType, val), null);
 				}
 				else {
 					_prop.SetValue (obj, val, null);
@@ -2535,12 +2547,12 @@ namespace SQLite
 	{
 		public EnumCacheInfo (Type type)
 		{
-			var typeInfo = type.GetTypeInfo ();
+			//var typeInfo = type.GetTypeInfo ();
 
-			IsEnum = typeInfo.IsEnum;
+			IsEnum = type.IsEnum;
 
 			if (IsEnum) {
-				StoreAsText = typeInfo.CustomAttributes.Any (x => x.AttributeType == typeof (StoreAsTextAttribute));
+				StoreAsText = type.GetCustomAttributesData().Any (x => x.Constructor.DeclaringType == typeof (StoreAsTextAttribute));
 
 				if (StoreAsText) {
 					EnumValues = new Dictionary<int, string> ();
@@ -2587,14 +2599,20 @@ namespace SQLite
 		public const string ImplicitPkName = "Id";
 		public const string ImplicitIndexSuffix = "Id";
 
+        const BindingFlags declaredFlags = BindingFlags.DeclaredOnly |
+            BindingFlags.Public | BindingFlags.NonPublic |
+                BindingFlags.Static | BindingFlags.Instance;
+
 		public static Type GetType (object obj)
 		{
 			if (obj == null)
 				return typeof (object);
-			var rt = obj as IReflectableType;
-			if (rt != null)
-				return rt.GetTypeInfo ().AsType ();
-			return obj.GetType ();
+            return obj.GetType();
+
+            //var rt = obj as IReflectableType;
+            //if (rt != null)
+            //    return rt.GetTypeInfo ().AsType ();
+            //return obj.GetType ();
 		}
 
 		public static string SqlDecl (TableMapping.Column p, bool storeDateTimeAsTicks)
@@ -2643,7 +2661,7 @@ namespace SQLite
 			else if (clrType == typeof (DateTimeOffset)) {
 				return "bigint";
 			}
-			else if (clrType.GetTypeInfo ().IsEnum) {
+			else if (clrType.IsEnum) {
 				if (p.StoreAsText)
 					return "varchar";
 				else
@@ -2662,14 +2680,14 @@ namespace SQLite
 
 		public static bool IsPK (MemberInfo p)
 		{
-			return p.CustomAttributes.Any (x => x.AttributeType == typeof (PrimaryKeyAttribute));
+			return p.GetCustomAttributesData().Any (x => x.Constructor.DeclaringType == typeof (PrimaryKeyAttribute));
 		}
 
 		public static string Collation (MemberInfo p)
 		{
 			return
-				(p.CustomAttributes
-				 .Where (x => typeof (CollationAttribute) == x.AttributeType)
+				(p.GetCustomAttributesData()
+				 .Where (x => typeof (CollationAttribute) == x.Constructor.DeclaringType)
 				 .Select (x => {
 					 var args = x.ConstructorArguments;
 					 return args.Count > 0 ? ((args[0].Value as string) ?? "") : "";
@@ -2679,37 +2697,39 @@ namespace SQLite
 
 		public static bool IsAutoInc (MemberInfo p)
 		{
-			return p.CustomAttributes.Any (x => x.AttributeType == typeof (AutoIncrementAttribute));
+			return p.GetCustomAttributesData().Any (x => x.Constructor.DeclaringType == typeof (AutoIncrementAttribute));
 		}
 
-		public static FieldInfo GetField (TypeInfo t, string name)
+		public static FieldInfo GetField (Type t, string name)
 		{
-			var f = t.GetDeclaredField (name);
-			if (f != null)
-				return f;
-			return GetField (t.BaseType.GetTypeInfo (), name);
+			var f = t.GetField (name, declaredFlags);
+            if (f != null)
+                return f;
+            else
+                return null;
 		}
 
-		public static PropertyInfo GetProperty (TypeInfo t, string name)
+		public static PropertyInfo GetProperty (Type t, string name)
 		{
-			var f = t.GetDeclaredProperty (name);
-			if (f != null)
-				return f;
-			return GetProperty (t.BaseType.GetTypeInfo (), name);
+			var f = t.GetProperty (name, declaredFlags);
+            if (f != null)
+                return f;
+            else
+                return null;
 		}
 
 		public static object InflateAttribute (CustomAttributeData x)
 		{
-			var atype = x.AttributeType;
-			var typeInfo = atype.GetTypeInfo ();
+			var atype = x.Constructor.DeclaringType;
+			//var typeInfo = atype.GetTypeInfo ();
 			var args = x.ConstructorArguments.Select (a => a.Value).ToArray ();
-			var r = Activator.CreateInstance (x.AttributeType, args);
+			var r = Activator.CreateInstance (x.Constructor.DeclaringType, args);
 			foreach (var arg in x.NamedArguments) {
-				if (arg.IsField) {
-					GetField (typeInfo, arg.MemberName).SetValue (r, arg.TypedValue.Value);
+				if (arg.MemberInfo is FieldInfo) {
+					GetField (atype, arg.MemberInfo.Name).SetValue (r, arg.TypedValue.Value);
 				}
 				else {
-					GetProperty (typeInfo, arg.MemberName).SetValue (r, arg.TypedValue.Value);
+					GetProperty (atype, arg.MemberInfo.Name).SetValue(r, arg.TypedValue.Value, null);
 				}
 			}
 			return r;
@@ -2717,16 +2737,17 @@ namespace SQLite
 
 		public static IEnumerable<IndexedAttribute> GetIndices (MemberInfo p)
 		{
-			var indexedInfo = typeof (IndexedAttribute).GetTypeInfo ();
+			//var indexedInfo = typeof (IndexedAttribute).GetTypeInfo ();
+            var indexedType = typeof(IndexedAttribute);
 			return
-				p.CustomAttributes
-				 .Where (x => indexedInfo.IsAssignableFrom (x.AttributeType.GetTypeInfo ()))
+				p.GetCustomAttributesData()
+				 .Where (x => indexedType.IsAssignableFrom (x.Constructor.DeclaringType))
 				 .Select (x => (IndexedAttribute)InflateAttribute (x));
 		}
 
 		public static int? MaxStringLength (PropertyInfo p)
 		{
-			var attr = p.CustomAttributes.FirstOrDefault (x => x.AttributeType == typeof (MaxLengthAttribute));
+			var attr = p.GetCustomAttributesData().FirstOrDefault (x => x.Constructor.DeclaringType == typeof (MaxLengthAttribute));
 			if (attr != null) {
 				var attrv = (MaxLengthAttribute)InflateAttribute (attr);
 				return attrv.Value;
@@ -2736,7 +2757,7 @@ namespace SQLite
 
 		public static bool IsMarkedNotNull (MemberInfo p)
 		{
-			return p.CustomAttributes.Any (x => x.AttributeType == typeof (NotNullAttribute));
+			return p.GetCustomAttributesData().Any (x => x.Constructor.DeclaringType == typeof (NotNullAttribute));
 		}
 	}
 
@@ -2756,8 +2777,8 @@ namespace SQLite
 
 		public int ExecuteNonQuery ()
 		{
-			if (_conn.Trace) {
-				_conn.Tracer?.Invoke ("Executing: " + this);
+			if (_conn.Trace && _conn.Tracer != null) {
+				_conn.Tracer.Invoke ("Executing: " + this);
 			}
 
 			var r = SQLite3.Result.OK;
@@ -2813,8 +2834,8 @@ namespace SQLite
 
 		public IEnumerable<T> ExecuteDeferredQuery<T> (TableMapping map)
 		{
-			if (_conn.Trace) {
-				_conn.Tracer?.Invoke ("Executing Query: " + this);
+			if (_conn.Trace && _conn.Tracer != null) {
+				_conn.Tracer.Invoke ("Executing Query: " + this);
 			}
 
 			var stmt = Prepare ();
@@ -2846,8 +2867,8 @@ namespace SQLite
 
 		public T ExecuteScalar<T> ()
 		{
-			if (_conn.Trace) {
-				_conn.Tracer?.Invoke ("Executing Query: " + this);
+			if (_conn.Trace && _conn.Tracer != null) {
+				_conn.Tracer.Invoke ("Executing Query: " + this);
 			}
 
 			T val = default (T);
@@ -3015,10 +3036,10 @@ namespace SQLite
 				return null;
 			}
 			else {
-				var clrTypeInfo = clrType.GetTypeInfo ();
-				if (clrTypeInfo.IsGenericType && clrTypeInfo.GetGenericTypeDefinition () == typeof (Nullable<>)) {
-					clrType = clrTypeInfo.GenericTypeArguments[0];
-					clrTypeInfo = clrType.GetTypeInfo ();
+				//var clrTypeInfo = clrType.GetTypeInfo ();
+				if (clrType.IsGenericType && clrType.GetGenericTypeDefinition () == typeof (Nullable<>)) {
+					clrType = clrType.GetGenericArguments()[0];
+					//clrTypeInfo = clrType.GetTypeInfo ();
 				}
 
 				if (clrType == typeof (String)) {
@@ -3055,7 +3076,7 @@ namespace SQLite
 				else if (clrType == typeof (DateTimeOffset)) {
 					return new DateTimeOffset (SQLite3.ColumnInt64 (stmt, index), TimeSpan.Zero);
 				}
-				else if (clrTypeInfo.IsEnum) {
+				else if (clrType.IsEnum) {
 					if (type == SQLite3.ColType.Text) {
 						var value = SQLite3.ColumnString (stmt, index);
 						return Enum.Parse (clrType, value.ToString (), true);
@@ -3133,11 +3154,11 @@ namespace SQLite
 		public int ExecuteNonQuery (object[] source)
 		{
 			if (Initialized && Statement == NullStatement) {
-				throw new ObjectDisposedException (nameof (PreparedSqlLiteInsertCommand));
+				throw new ObjectDisposedException ("PreparedSqlLiteInsertCommand");
 			}
 
-			if (Connection.Trace) {
-				Connection.Tracer?.Invoke ("Executing: " + CommandText);
+			if (Connection.Trace && Connection.Tracer != null) {
+				Connection.Tracer.Invoke ("Executing: " + CommandText);
 			}
 
 			var r = SQLite3.Result.OK;
