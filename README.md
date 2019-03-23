@@ -2,7 +2,9 @@
 # SQLite-net
 
 This version of SQLite-net is downgrade to .net framework 4.0
+
 此版本适用于.net framework 4.0。
+
 
 [![Build Status](https://app.bitrise.io/app/bf752c26c31aec6c/status.svg?token=puU-yHhMNdAwJUusm9swlA&branch=master)](https://app.bitrise.io/app/bf752c26c31aec6c)
 
