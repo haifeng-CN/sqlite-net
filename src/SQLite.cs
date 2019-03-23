@@ -35,6 +35,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
 using System.Threading;
+using System.Data;
 
 #if USE_CSHARP_SQLITE
 using Sqlite3 = Community.CsharpSqlite.Sqlite3;
@@ -1036,6 +1037,25 @@ namespace SQLite
 			var cmd = CreateCommand (query, args);
 			return cmd.ExecuteDeferredQuery<object> (map);
 		}
+
+        /// <summary>
+        /// Create a SQLiteCommand by the given command text (SQL) with arguments. Use '?' in the 
+        /// command text for each arguments.
+        /// </summary>
+        /// <param name="query">
+        /// The fully escaped SQL.
+        /// </param>
+        /// <param name="args">
+        /// Arguments to substitute for the occurences of '?' in the query.
+        /// </param>
+        /// <returns>
+        /// DataTable result
+        /// </returns>
+        public DataTable QueryTable(string query, params object[] args)
+        {
+            var cmd = CreateCommand(query, args);
+            return cmd.ExecuteTable();
+        }
 
 		/// <summary>
 		/// Returns a queryable interface to the table represented by the given type.
@@ -2894,6 +2914,72 @@ namespace SQLite
 			return val;
 		}
 
+        /// <summary>
+        /// execute the query, and return DataTable
+        /// </summary>
+        /// <returns></returns>
+        public DataTable ExecuteTable()
+        {
+            if (_conn.Trace && _conn.Tracer != null)
+            {
+                _conn.Tracer.Invoke("Executing Query: " + this);
+            }
+
+            var stmt = Prepare();
+            try
+            {
+                //create datatable
+                DataTable table = new DataTable();
+                //key=index,value=Type
+                Dictionary<int, Type> colsDict = new Dictionary<int, Type>();
+                //create datatable columns
+                int colsCount = SQLite3.ColumnCount(stmt);
+                for (int i = 0; i < colsCount; i++)
+                {
+                    var colName = SQLite3.ColumnName16(stmt, i);
+                    var colType = SQLite3.ColumnDeclType16(stmt, i);
+                    Type clrType;
+                    if (colType == "integer")
+                        clrType = typeof(int);
+                    else if (colType == "bigint")
+                        clrType = typeof(long);
+                    else if (colType == "float")
+                        clrType = typeof(double);
+                    else if (colType == "text" || colType.StartsWith("varchar"))
+                        clrType = typeof(string);
+                    else if (colType == "blob")
+                        clrType = typeof(byte[]);
+                    else if (colType == "datetime")
+                        clrType = typeof(DateTime);
+                    else
+                        throw new NotSupportedException("the sqlite ColumnDeclType is not supported.");
+
+                    table.Columns.Add(colName, clrType);
+                    colsDict.Add(i, clrType);
+                }
+
+                //fill data
+                while (SQLite3.Step(stmt) == SQLite3.Result.Row)
+                {
+                    var row = table.NewRow();
+                    for (int i = 0; i < colsCount; i++)
+                    {
+                        var colType = SQLite3.ColumnType(stmt, i);
+                        var clrType = colsDict[i];
+                        var val = ReadCol(stmt, i, colType, clrType);
+                        row[i] = val;
+                    }
+                    table.Rows.Add(row);
+                }
+
+                return table;
+            }
+            finally
+            {
+                SQLite3.Finalize(stmt);
+            }
+        }
+
 		public void Bind (string name, object val)
 		{
 			_bindings.Add (new Binding {
@@ -4106,6 +4192,15 @@ namespace SQLite
 		{
 			return Marshal.PtrToStringUni(ColumnName16Internal(stmt, index));
 		}
+        [DllImport(LibraryPath, EntryPoint = "sqlite3_column_decltype", CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr ColumnDeclType(IntPtr stmt, int index);
+
+        [DllImport(LibraryPath, EntryPoint = "sqlite3_column_decltype16", CallingConvention = CallingConvention.Cdecl)]
+        static extern IntPtr ColumnDeclType16Internal(IntPtr stmt, int index);
+        public static string ColumnDeclType16(IntPtr stmt, int index)
+        {
+            return Marshal.PtrToStringUni(ColumnDeclType16Internal(stmt, index));
+        }
 
 		[DllImport(LibraryPath, EntryPoint = "sqlite3_column_type", CallingConvention=CallingConvention.Cdecl)]
 		public static extern ColType ColumnType (IntPtr stmt, int index);

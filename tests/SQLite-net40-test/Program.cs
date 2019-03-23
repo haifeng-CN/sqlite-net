@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Data;
 using SQLite;
 using SQLite_net40_test.Entity;
 
@@ -15,6 +16,7 @@ namespace SQLite_net40_test
             TestInsert();
             TestUpdate();
             TestDelete();
+            TestTable();
 
             Console.ReadKey();
         }
@@ -53,6 +55,34 @@ namespace SQLite_net40_test
 
         static void TestDelete()
         { }
+
+        static void TestTable()
+        {
+            Console.WriteLine("\nTest Query and return DataTable");
+
+            var sql = "select * from User";
+            var conn = CreateConnection();
+            var table = conn.QueryTable(sql);
+            int colCount = table.Columns.Count;
+            foreach(DataColumn col in table.Columns)
+            {
+                Console.Write(col.ColumnName);
+                Console.Write(",    ");
+            }
+            Console.Write("\n");
+
+            foreach(DataRow row in table.Rows)
+            {
+                for (int i = 0; i < colCount; i++)
+                {
+                    Console.Write(row[i]);
+                    Console.Write(",    ");
+                }
+                Console.Write("\n");
+            }
+
+            Console.WriteLine("End of Test.");
+        }
 
 
     }
