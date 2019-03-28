@@ -2655,6 +2655,55 @@ namespace SQLite
 			return decl;
 		}
 
+        /// <summary>
+        /// get clr Type from declare column type
+        /// </summary>
+        /// <param name="declType"></param>
+        /// <returns></returns>
+        public static Type ClrType(string declType)
+        {
+            Type clrType;
+            if (declType == null || declType == string.Empty)
+                clrType = typeof(object);
+            else if (declType == "integer")
+                clrType = typeof(int);
+            else if (declType == "bigint")
+                clrType = typeof(long);
+            else if (declType == "float" || declType == "numeric")
+                clrType = typeof(double);
+            else if (declType == "text" || declType.StartsWith("varchar"))
+                clrType = typeof(string);
+            else if (declType == "blob")
+                clrType = typeof(byte[]);
+            else if (declType == "datetime")
+                clrType = typeof(DateTime);
+            else
+                throw new NotSupportedException("the sqlite ColumnDeclType is not supported.");
+
+            return clrType;
+        }
+
+        /// <summary>
+        /// get clr Type from data type
+        /// </summary>
+        /// <param name="colType"></param>
+        /// <returns></returns>
+        public static Type ClrType(SQLite3.ColType colType)
+        {
+            if (colType == SQLite3.ColType.Integer)
+                return typeof(long);
+            else if (colType == SQLite3.ColType.Float)
+                return typeof(double);
+            else if (colType == SQLite3.ColType.Text)
+                return typeof(string);
+            else if (colType == SQLite3.ColType.Blob)
+                return typeof(byte[]);
+            else if (colType == SQLite3.ColType.Null)
+                return typeof(object);
+            else
+                throw new NotSupportedException("not supported ColType");
+        }
+
 		public static string SqlType (TableMapping.Column p, bool storeDateTimeAsTicks)
 		{
 			var clrType = p.ColumnType;
@@ -2937,22 +2986,8 @@ namespace SQLite
                 for (int i = 0; i < colsCount; i++)
                 {
                     var colName = SQLite3.ColumnName16(stmt, i);
-                    var colType = SQLite3.ColumnDeclType16(stmt, i);
-                    Type clrType;
-                    if (colType == "integer")
-                        clrType = typeof(int);
-                    else if (colType == "bigint")
-                        clrType = typeof(long);
-                    else if (colType == "float")
-                        clrType = typeof(double);
-                    else if (colType == "text" || colType.StartsWith("varchar"))
-                        clrType = typeof(string);
-                    else if (colType == "blob")
-                        clrType = typeof(byte[]);
-                    else if (colType == "datetime")
-                        clrType = typeof(DateTime);
-                    else
-                        throw new NotSupportedException("the sqlite ColumnDeclType is not supported.");
+                    var declType = SQLite3.ColumnDeclType16(stmt, i);
+                    Type clrType = Orm.ClrType(declType);
 
                     table.Columns.Add(colName, clrType);
                     colsDict.Add(i, clrType);
@@ -2966,8 +3001,13 @@ namespace SQLite
                     {
                         var colType = SQLite3.ColumnType(stmt, i);
                         var clrType = colsDict[i];
+                        if (clrType == typeof(object))
+                            clrType = Orm.ClrType(colType);
                         var val = ReadCol(stmt, i, colType, clrType);
-                        row[i] = val;
+                        if (val != null)
+                            row[i] = val;
+                        else
+                            row[i] = DBNull.Value;
                     }
                     table.Rows.Add(row);
                 }
