@@ -5,6 +5,10 @@ This version of SQLite-net is downgrade to .net framework 4.0
 
 此版本适用于.net framework 4.0。
 
+Add QueryTable() method to SQLiteConnection, this mehod can return DataTable from a query.
+
+增加了一个 QueryTable() 方法，可以查询sql并返回DataTable.
+
 
 [![Build Status](https://app.bitrise.io/app/bf752c26c31aec6c/status.svg?token=puU-yHhMNdAwJUusm9swlA&branch=master)](https://app.bitrise.io/app/bf752c26c31aec6c)
 
